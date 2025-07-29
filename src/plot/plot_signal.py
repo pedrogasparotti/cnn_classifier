@@ -22,5 +22,4 @@ for i in range(num_signals):
     plt.plot(signal, label=f'Signal {i+1}')
 
 # Labeling and legend
-
 plt.show()
