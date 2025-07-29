@@ -37,7 +37,7 @@ def load_and_label_datasets():
         print(f"  Loaded {len(df)} samples")
     
     # Combine all datasets
-    combined_df = pd.concat(combined_data, ignore_index=True)
+    combined_df = pd.concat(combined_data, ignore_index=True).fillna(0)
     
     print(f"\nCombined dataset: {len(combined_df)} total samples")
     print("Label distribution:")
@@ -49,64 +49,49 @@ def load_and_label_datasets():
 def process_combined_signals(combined_df, target_length=2000, remove_first_n=500):
     """
     Process combined signal dataset for CNN classification.
-
-    Args:
-        combined_df: DataFrame with signals and labels
-        target_length: Final signal length after processing
-        remove_first_n: Number of initial samples to discard
-    
-    Returns:
-        processed_signals: numpy array of shape (n_samples, target_length, 1)
-        labels: numpy array of integer labels
-        label_names: list of label names for reference
+    This version correctly scales each signal individually and is robust to errors.
     """
-    
-    # Extract labels
     labels = combined_df['label'].values
-    label_names = combined_df['label_name'].values
+    label_names = combined_df['label_name'].unique().tolist()
     
-    # Extract signal data (exclude label columns) -> X
-    signal_data = combined_df.drop(columns=['label', 'label_name'])
+    # Convert to NumPy once, drop labels. This is much faster than iterrows().
+    signal_data = combined_df.drop(columns=['label', 'label_name']).to_numpy(dtype=np.float32)
+
+    # --- Vectorized Processing ---
+    # 1. Remove initial samples from all signals at once
+    processed_signals = signal_data[:, remove_first_n:]
     
-    processed_signals = []
-    valid_indices = []
-    
-    for idx, row in signal_data.iterrows():
-        signal = row.values.astype(np.float32)
-        
-        # Remove first 500 samples -> steps before vehicle bridge interaction
-        if len(signal) > remove_first_n: # -> this is a paramether of the function
-            signal = signal[remove_first_n:]
-        else:
-            print(f"Warning: Signal {idx} too short, skipping")
-            continue
-        
-        # Standardize signal length
-        if len(signal) > target_length:
-            # Truncate
-            signal = signal[:target_length]
-        elif len(signal) < target_length:
-            # Pad with zeros
-            padding = target_length - len(signal)
-            signal = np.pad(signal, (0, padding), mode='constant', constant_values=0)
-        
-        processed_signals.append(signal)
-        valid_indices.append(idx)
-    
-    processed_signals = np.array(processed_signals)
-    labels = labels[valid_indices]
-    label_names = label_names[valid_indices]
-    
-    # Normalize signals
+    # 2. Truncate or pad all signals
+    current_length = processed_signals.shape[1]
+    if current_length > target_length:
+        processed_signals = processed_signals[:, :target_length]
+    elif current_length < target_length:
+        padding_width = target_length - current_length
+        # Pad on the right side of each signal
+        processed_signals = np.pad(processed_signals, ((0, 0), (0, padding_width)), mode='constant', constant_values=0)
+
+    # --- CRITICAL FIX: Per-Signal Scaling ---
+    # Iterate through each signal (row) and scale it individually.
     for i in range(processed_signals.shape[0]):
-        signal_mean = processed_signals[i].mean()
-        signal_std = processed_signals[i].std()
-        if signal_std > 0:
-            processed_signals[i] = (processed_signals[i] - signal_mean) / signal_std
-    
+        signal = processed_signals[i]
+        std_dev = np.std(signal)
+        # Only scale if the signal has variance. Otherwise, it's a flat line.
+        if std_dev > 1e-6: # Use a small epsilon for floating point safety
+            mean = np.mean(signal)
+            processed_signals[i] = (signal - mean) / std_dev
+        else:
+            # If standard deviation is zero, the signal is flat. Just center it.
+            processed_signals[i] = signal - np.mean(signal)
+            
+    # Final check to guarantee no bad values are produced
+    if np.isnan(processed_signals).any() or np.isinf(processed_signals).any():
+        raise ValueError("Data contains NaN/Inf values AFTER processing. Check raw data.")
+
     # Add channel dimension for CNN
     processed_signals = processed_signals.reshape(processed_signals.shape[0], processed_signals.shape[1], 1)
     
+    # NOTE: The original `scaler` object is removed because scaling is now custom.
+    # The function no longer returns a scaler.
     return processed_signals, labels, label_names
 
 def save_processed_dataset(signals, labels, label_names, output_dir='/Users/home/Documents/github/cnn_classification/data/processed', holdout_samples_per_class=100, seed=42):
