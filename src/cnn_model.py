@@ -109,7 +109,7 @@ def train_model(model, X_train, y_train):
         X_train, y_train,
         epochs=EPOCHS,
         batch_size=BATCH_SIZE,
-        validation_split=VALIDATION_SPLIT, # IMPORTANT: Carves out validation set from TRAINING data
+        validation_split=VALIDATION_SPLIT,
         callbacks=[checkpoint, early_stopping]
     )
     print("--- Model Training Finished ---\n")

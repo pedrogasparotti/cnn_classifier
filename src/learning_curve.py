@@ -13,7 +13,7 @@ PROCESSED_DATA_DIR = os.path.join('data', 'processed')
 MODEL_OUTPUT_DIR = 'models'
 
 # 1. Define the number of samples PER CLASS to test
-SAMPLE_SIZES_PER_CLASS = [5, 10, 20, 40, 60, 80, 100]
+SAMPLE_SIZES_PER_CLASS = [5, 10, 20, 40, 60, 80, 100, 150, 200]
 
 # 2. Define how many random trials to run for each sample size
 NUM_TRIALS_PER_SIZE = 5
