@@ -18,7 +18,7 @@ def load_and_label_datasets():
     datasets = [
         ('/Users/home/Documents/github/cnn_classification/data/acc_vehicle_data_dof_5.csv', 0, 'y0'), #healthy
         ('/Users/home/Documents/github/cnn_classification/data/acc_vehicle_data_dof_5_5pc.csv', 1, 'y1'), #5pc damage
-        ('/Users/home/Documents/github/cnn_classification/data/acc_vehicle_data_dof_5_10pc.csv', 2, '10pc_damage') #10pc damage
+        ('/Users/home/Documents/github/cnn_classification/data/acc_vehicle_data_dof_5_10pc.csv', 2, 'y2') #10pc damage
     ]
     
     # store all data into an array
@@ -28,7 +28,7 @@ def load_and_label_datasets():
         print(f"Loading {label_name}: {filepath}")
         
         df = pd.read_csv(filepath)
-        
+
         # Add label columns
         df['label'] = label
         df['label_name'] = label_name
@@ -70,7 +70,7 @@ def process_combined_signals(combined_df, target_length=2000, remove_first_n=500
         # Pad on the right side of each signal
         processed_signals = np.pad(processed_signals, ((0, 0), (0, padding_width)), mode='constant', constant_values=0)
 
-    # --- CRITICAL FIX: Per-Signal Scaling ---
+    # --- Per-Signal Scaling ---
     # Iterate through each signal (row) and scale it individually.
     for i in range(processed_signals.shape[0]):
         signal = processed_signals[i]
@@ -94,7 +94,7 @@ def process_combined_signals(combined_df, target_length=2000, remove_first_n=500
     # The function no longer returns a scaler.
     return processed_signals, labels, label_names
 
-def save_processed_dataset(signals, labels, label_names, output_dir='/Users/home/Documents/github/cnn_classification/data/processed', holdout_samples_per_class=100, seed=42):
+def save_processed_dataset(signals, labels, label_names, output_dir='/Users/home/Documents/github/cnn_classification/data/processed', holdout_samples_per_class=100, samples_per_class_subsample = 100, seed=42):
     """
     Correctly isolates a holdout dataset and saves distinct train/test/holdout splits.
     This version fixes critical file naming bugs and clarifies the data splitting logic.
@@ -134,10 +134,44 @@ def save_processed_dataset(signals, labels, label_names, output_dir='/Users/home
     X_pool = np.delete(signals, holdout_indices, axis=0)
     y_pool_int = np.delete(labels, holdout_indices, axis=0)
 
+    # Get the unique class labels from the pool.
+    unique_labels_pool = np.unique(y_pool_int)
+
+    # This list will store the indices we select for our subsample.
+    subsample_indices = []
+
+    # Loop through each class to perform stratified sampling.
+    for class_label in unique_labels_pool:
+        # Find all indices in the pool that belong to the current class.
+        class_indices_pool = np.where(y_pool_int == class_label)[0]
+        
+        # Check if there are enough samples to draw from.
+        if len(class_indices_pool) < samples_per_class_subsample:
+            raise ValueError(
+                f"Cannot sample {samples_per_class_subsample} for subsample from class {class_label}. "
+                f"Only {len(class_indices_pool)} samples available in the pool."
+            )
+            
+        # Randomly choose 100 indices for this class without replacement.
+        sampled_indices = np.random.choice(
+            class_indices_pool, 
+            size=samples_per_class_subsample, 
+            replace=False
+        )
+        subsample_indices.extend(sampled_indices)
+
+    # Convert the list of indices to a NumPy array for efficient slicing.
+    subsample_indices = np.array(subsample_indices)
+    np.random.shuffle(subsample_indices) # Shuffle to mix the order of classes
+
+    # Create the final subsampled dataset.
+    X_subsample = X_pool[subsample_indices]
+    y_subsample_int = y_pool_int[subsample_indices]
+
     # --- 3. Split the Pool into Training and Testing Sets ---
     # Stratify to ensure class distribution is similar in train and test sets.
     X_train, X_test, y_train_int, y_test_int = train_test_split(
-        X_pool, y_pool_int, test_size=0.2, random_state=seed, stratify=y_pool_int
+        X_subsample, y_subsample_int, test_size=0.2, random_state=seed, stratify=y_subsample_int
     )
 
     # --- 4. One-Hot Encode All Label Sets ---
@@ -147,14 +181,14 @@ def save_processed_dataset(signals, labels, label_names, output_dir='/Users/home
 
     # --- 5. Save All Datasets with Clear, Correct Names ---
     # Training set
-    np.save(os.path.join(output_dir, 'X_train.npy'), X_train)
-    np.save(os.path.join(output_dir, 'y_train.npy'), y_train)
-    np.save(os.path.join(output_dir, 'y_train_int.npy'), y_train_int)
+    np.save(os.path.join(output_dir, 'X_train_sub.npy'), X_train)
+    np.save(os.path.join(output_dir, 'y_train_sub.npy'), y_train)
+    np.save(os.path.join(output_dir, 'y_train_int_sub.npy'), y_train_int)
 
     # Testing set
-    np.save(os.path.join(output_dir, 'X_test.npy'), X_test)
-    np.save(os.path.join(output_dir, 'y_test.npy'), y_test)
-    np.save(os.path.join(output_dir, 'y_test_int.npy'), y_test_int)
+    np.save(os.path.join(output_dir, 'X_test_sub.npy'), X_test)
+    np.save(os.path.join(output_dir, 'y_test_sub.npy'), y_test)
+    np.save(os.path.join(output_dir, 'y_test_int_sub.npy'), y_test_int)
 
     # Holdout set (for double blind validation)
     np.save(os.path.join(output_dir, 'X_holdout.npy'), X_holdout)

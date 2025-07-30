@@ -18,7 +18,7 @@ SAMPLE_SIZES_PER_CLASS = [5, 10, 20, 40, 60, 80, 100]
 # 2. Define how many random trials to run for each sample size
 NUM_TRIALS_PER_SIZE = 5
 
-# 3. Training parameters (can be kept minimal for this experiment)
+# 3. Training parameters
 EPOCHS = 30
 BATCH_SIZE = 16
 

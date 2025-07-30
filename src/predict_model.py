@@ -7,7 +7,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # --- Configuration ---
-# These paths must match the output of your previous scripts
 PROCESSED_DATA_DIR = os.path.join('data', 'processed')
 MODEL_OUTPUT_DIR = 'models'
 BEST_MODEL_PATH = os.path.join(MODEL_OUTPUT_DIR, 'best_cnn_model.keras')

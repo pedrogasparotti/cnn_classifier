@@ -27,10 +27,10 @@ def load_data(data_dir):
     if not os.path.exists(data_dir):
         raise FileNotFoundError(f"Data directory not found: {data_dir}. Run the preprocessing script first.")
 
-    X_train = np.load(os.path.join(data_dir, 'X_train.npy'))
-    y_train = np.load(os.path.join(data_dir, 'y_train.npy'))
-    X_test = np.load(os.path.join(data_dir, 'X_test.npy'))
-    y_test = np.load(os.path.join(data_dir, 'y_test.npy'))
+    X_train = np.load(os.path.join(data_dir, 'X_train_sub.npy'))
+    y_train = np.load(os.path.join(data_dir, 'y_train_sub.npy'))
+    X_test = np.load(os.path.join(data_dir, 'X_test_sub.npy'))
+    y_test = np.load(os.path.join(data_dir, 'y_test_sub.npy'))
     
     with open(os.path.join(data_dir, 'metadata.json'), 'r') as f:
         metadata = json.load(f)
@@ -40,8 +40,7 @@ def load_data(data_dir):
 
 def build_model(input_shape, num_classes):
     """
-    Builds a more robust and stable 1D CNN model using GlobalAveragePooling1D.
-    This version is less prone to exploding gradients and overfitting.
+    Builds a 1D CNN model using GlobalAveragePooling1D.
     """
     # Use the modern Keras functional API starting with an Input layer
     inputs = tf.keras.Input(shape=input_shape)
@@ -63,9 +62,7 @@ def build_model(input_shape, num_classes):
     x = Conv1D(filters=128, kernel_size=5, padding='same')(x)
     x = BatchNormalization()(x)
     x = tf.keras.layers.Activation('relu')(x)
-    
-    # --- CRITICAL FIX: Replace Flatten with Global Pooling ---
-    # This dramatically reduces parameters and increases stability.
+
     x = tf.keras.layers.GlobalAveragePooling1D()(x)
 
     # --- Classifier Head ---
@@ -75,7 +72,6 @@ def build_model(input_shape, num_classes):
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     
-    # --- CRITICAL FIX: Lower the learning rate ---
     optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
     
     model.compile(optimizer=optimizer,
@@ -88,7 +84,7 @@ def build_model(input_shape, num_classes):
     
 def train_model(model, X_train, y_train):
     """
-    Trains the model using callbacks that enforce good practices.
+    Trains the model using callbacks
     """
     os.makedirs(MODEL_OUTPUT_DIR, exist_ok=True)
     
@@ -125,7 +121,7 @@ def evaluate_model(X_test, y_test, metadata):
     """
     print("--- Evaluating Best Model on Test Set ---")
     
-    # Load the best performing model, not just the last one from memory.
+    # Load the best performing model
     best_model = load_model(BEST_MODEL_PATH)
     
     # 1. Get loss and accuracy
