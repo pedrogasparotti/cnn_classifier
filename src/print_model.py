@@ -2,7 +2,7 @@ import tensorflow as tf
 import os
 
 # --- 1. SET THE PATH TO YOUR MODEL FILE HERE ---
-MODEL_PATH = '/Users/home/Documents/github/cnn_classification/models/best_cnn_model.keras'
+MODEL_PATH = '/Users/home/Documents/github/cnn_classification/cross_val_results/models/best_model.keras'
 
 OUTPUT_IMAGE_PATH = None
 

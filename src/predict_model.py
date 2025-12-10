@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 # --- Configuration ---
 PROCESSED_DATA_DIR = os.path.join('data', 'processed')
 MODEL_OUTPUT_DIR = 'models'
-BEST_MODEL_PATH = '/Users/home/Documents/github/cnn_classification/models/final_kfold_model.keras'
+BEST_MODEL_PATH = '/Users/home/Documents/github/cnn_classification/cross_val_results/models/best_model.keras'
 
 def evaluate_on_holdout():
     """

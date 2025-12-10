@@ -14,8 +14,8 @@ PROCESSED_DATA_DIR = os.path.join('data', 'processed')
 # Directory where all output figures and models will be saved.
 RESULTS_DIR = 'cross_val_results'
 NUM_FOLDS = 5
-EPOCHS = 45
-BATCH_SIZE = 32
+EPOCHS = 30
+BATCH_SIZE = 16
 
 def plot_and_save_history(history, fold_num, output_dir):
     """
@@ -95,6 +95,9 @@ def plot_and_save_class_distribution(y_train, y_val, fold_num, class_names, outp
         class_names (list): A list of strings representing the class names.
         output_dir (str): The directory to save the plot in.
     """
+    # This function requires pandas, which is checked for at the bottom of the script.
+    import pandas as pd
+    
     print(f"Generating class distribution plot for Fold {fold_num}...")
     train_counts = Counter(y_train)
     val_counts = Counter(y_val)
@@ -107,8 +110,8 @@ def plot_and_save_class_distribution(y_train, y_val, fold_num, class_names, outp
     df_train = pd.DataFrame.from_dict(train_counts, orient='index').sort_index()
     df_val = pd.DataFrame.from_dict(val_counts, orient='index').sort_index()
 
-    x = np.arange(len(class_names))  # the label locations
-    width = 0.35  # the width of the bars
+    x = np.arange(len(class_names))  
+    width = 0.35 
 
     fig, ax = plt.subplots(figsize=(12, 7))
     rects1 = ax.bar(x - width/2, df_train[0], width, label='Train')
@@ -138,7 +141,7 @@ def load_full_dataset(data_dir):
     The holdout set is NOT touched.
     """
     print(f"Loading and combining data from: {data_dir}")
-    # This assumes your data files exist. If not, you should handle exceptions.
+
     try:
         X_train = np.load(os.path.join(data_dir, 'X_train_sub.npy'))
         y_train_int = np.load(os.path.join(data_dir, 'y_train_int_sub.npy'))
@@ -147,7 +150,6 @@ def load_full_dataset(data_dir):
     except FileNotFoundError as e:
         print(f"Error: Data file not found. Make sure your processed data is in '{data_dir}'")
         print(e)
-        # Exit if data is not available
         exit()
 
     # Combine into a single dataset for k-folding
@@ -164,30 +166,42 @@ def load_full_dataset(data_dir):
 
 def build_model(input_shape, num_classes):
     """
-    Builds the same robust 1D CNN model as before.
+    Builds the optimized 1D CNN model based on the provided architecture.
     Must be called inside the loop to get a fresh model each time.
     """
     inputs = tf.keras.Input(shape=input_shape)
-    x = tf.keras.layers.Conv1D(filters=32, kernel_size=5, padding='same')(inputs)
+
+    # First Convolutional Block
+    # Based on the provided summary: Conv1D with 48 filters. Kernel size 5 is a common choice.
+    x = tf.keras.layers.Conv1D(filters=48, kernel_size=5, padding='same')(inputs)
     x = tf.keras.layers.BatchNormalization()(x)
     x = tf.keras.layers.Activation('relu')(x)
     x = tf.keras.layers.MaxPooling1D(pool_size=2)(x)
-    x = tf.keras.layers.Conv1D(filters=64, kernel_size=5, padding='same')(x)
+    # Dropout is added to regularize the model. 0.2 is a reasonable rate for conv layers.
+    x = tf.keras.layers.Dropout(0.2)(x)
+
+    # Second Convolutional Block
+    x = tf.keras.layers.Conv1D(filters=16, kernel_size=5, padding='same')(x)
     x = tf.keras.layers.BatchNormalization()(x)
     x = tf.keras.layers.Activation('relu')(x)
     x = tf.keras.layers.MaxPooling1D(pool_size=2)(x)
-    x = tf.keras.layers.Dropout(0.3)(x)
-    x = tf.keras.layers.Conv1D(filters=128, kernel_size=5, padding='same')(x)
-    x = tf.keras.layers.BatchNormalization()(x)
-    x = tf.keras.layers.Activation('relu')(x)
+    x = tf.keras.layers.Dropout(0.2)(x)
+
+    # Global Pooling and Dense Layers
     x = tf.keras.layers.GlobalAveragePooling1D()(x)
-    x = tf.keras.layers.Dense(128, activation='relu')(x)
+    x = tf.keras.layers.Dense(512, activation='relu')(x)
     x = tf.keras.layers.Dropout(0.5)(x)
+
+    # Output Layer
+    # The final dense layer has `num_classes` outputs with a softmax activation for classification.
     outputs = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
+    
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     
+    # Using the same optimizer and learning rate as the previous model.
     optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
     model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    
     return model
 
 
@@ -242,7 +256,7 @@ def run_cross_validation():
         
         # d. Define callbacks for this fold
         early_stopping = tf.keras.callbacks.EarlyStopping(
-            monitor='val_loss', patience=10, restore_best_weights=True
+            monitor='val_loss', patience=1, restore_best_weights=True
         )
 
         # e. Train the model
@@ -300,7 +314,7 @@ if __name__ == '__main__':
         print(f"ERROR: The data directory '{PROCESSED_DATA_DIR}' does not exist.")
         print("Please ensure your preprocessed data is in the correct location or update the PROCESSED_DATA_DIR variable.")
     else:
-        # We need pandas for the new plotting function
+        # We need pandas for the class distribution plotting function
         try:
             import pandas as pd
         except ImportError:

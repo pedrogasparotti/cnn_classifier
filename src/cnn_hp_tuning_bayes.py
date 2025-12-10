@@ -65,16 +65,17 @@ class CNNHyperModel(kt.HyperModel):
         x = inputs
 
         # Tune the number of feature extraction blocks
-        for i in range(hp.Int("num_blocks", min_value=1, max_value=4, step=1)):
+        for i in range(hp.Int("num_blocks", min_value=1, max_value=3, step=1)):
             x = Conv1D(
-                filters=hp.Int(f"filters_{i}", min_value=32, max_value=256, step=32),
+                filters=hp.Int(f"filters_{i}", min_value=16, max_value=64, step=32),
                 kernel_size=5,
                 padding="same",
             )(x)
             x = BatchNormalization()(x)
             x = Activation("relu")(x)
             x = MaxPooling1D(pool_size=2)(x)
-            x = Dropout(hp.Float(f"dropout_conv_{i}", min_value=0.1, max_value=0.5, step=0.1))(x)
+            # FIX: Changed max_value from 1.0 to 0.9 to be in the valid range [0, 1)
+            x = Dropout(hp.Float(f"dropout_conv_{i}", min_value=0.4, max_value=0.9, step=0.1))(x)
 
         x = GlobalAveragePooling1D()(x)
 
@@ -83,13 +84,14 @@ class CNNHyperModel(kt.HyperModel):
             units=hp.Int("dense_units", min_value=64, max_value=512, step=64),
             activation="relu",
         )(x)
-        x = Dropout(hp.Float("dropout_dense", min_value=0.3, max_value=0.7, step=0.1))(x)
+        # FIX: Changed max_value from 1.0 to 0.9 to be in the valid range [0, 1)
+        x = Dropout(hp.Float("dropout_dense", min_value=0.6, max_value=0.9, step=0.1))(x)
 
         outputs = Dense(self.num_classes, activation="softmax")(x)
         model = Model(inputs=inputs, outputs=outputs)
 
         # --- Compilation ---
-        learning_rate = hp.Float("lr", min_value=1e-5, max_value=1e-2, sampling="log")
+        learning_rate = hp.Float("lr", min_value=1e-6, max_value=1e-4, sampling="log")
         optimizer = Adam(learning_rate=learning_rate)
 
         model.compile(
@@ -134,7 +136,15 @@ def evaluate_model(model_path, X_test, y_test, metadata):
 # --- Main Execution ---
 if __name__ == '__main__':
     # 1. Load Data
-    X_train, y_train, X_test, y_test, metadata = load_data(PROCESSED_DATA_DIR)
+    # Note: Ensure your data loading paths are correct or modify as needed.
+    # This example assumes the script is run from the root of your project.
+    try:
+        X_train, y_train, X_test, y_test, metadata = load_data(PROCESSED_DATA_DIR)
+    except FileNotFoundError as e:
+        print(e)
+        print("Please ensure your preprocessed data exists or update the PROCESSED_DATA_DIR path.")
+        exit() # Exit if data is not found
+
     input_shape = (X_train.shape[1], X_train.shape[2])
     num_classes = y_train.shape[1]
 
@@ -144,9 +154,10 @@ if __name__ == '__main__':
     tuner = kt.BayesianOptimization(
         hypermodel,
         objective="val_accuracy",
-        max_trials=50,  # The number of hyperparameter combinations to test
+        max_trials=50,
         directory=TUNER_DIR,
         project_name=PROJECT_NAME,
+        overwrite=True # Set to True to start a new search
     )
 
     stop_early = EarlyStopping(monitor="val_loss", patience=5)
@@ -166,7 +177,8 @@ if __name__ == '__main__':
     best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
 
     print("\n--- Optimal Hyperparameters Found ---")
-    # ... (print statements for hyperparameters) ...
+    for hp_name, hp_value in best_hps.values.items():
+        print(f"{hp_name}: {hp_value}")
     
     # 5. Build and Train the Final Model with Best Hyperparameters
     print("\n--- Training Final Model with Best Hyperparameters ---")
@@ -180,8 +192,8 @@ if __name__ == '__main__':
     history = final_model.fit(
         X_train,
         y_train,
-        epochs=100,
-        batch_size=32, # Using a fixed batch size for final training
+        epochs=50,
+        batch_size=32, 
         validation_data=(X_test, y_test),
         callbacks=[final_checkpoint, final_early_stopping]
     )
